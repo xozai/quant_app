@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/xozai/quant_app/compare/v0.1.2...v0.2.0) (2026-06-23)
+
+
+### Features
+
+* add MVP P1 features — compare, universe scan, rolling Sharpe, benchmark metrics, HTML export ([#19](https://github.com/xozai/quant_app/issues/19)) ([e4d5788](https://github.com/xozai/quant_app/commit/e4d5788f470171d8809f79fafbf8b559308b51d6))
+
 ## [0.1.2](https://github.com/xozai/quant_app/compare/v0.1.1...v0.1.2) (2026-06-23)
 
 
