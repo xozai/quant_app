@@ -7,8 +7,9 @@ import pandas as pd
 import pytest
 
 from engine.data import fetch, is_crypto, MARKET_PRESETS
-from engine.backtest import Backtest
+from engine.backtest import Backtest, rolling_sharpe, benchmark_metrics
 from engine.risk import atr, compute_drawdown
+from engine.scanner import scan_universe
 from engine.validation import monte_carlo_test, strategy_audit
 from engine.capital_allocator import kelly_fraction, allocation_report
 from engine.journal import performance_review
@@ -179,3 +180,44 @@ def test_strategy_audit_structure(spy_daily):
     assert "overall" in audit
     assert audit["overall"]["tests_total"] == 6
     assert audit["overall"]["verdict"] in {"STRONG", "MARGINAL", "FAIL"}
+
+
+def test_rolling_sharpe_length(spy_daily):
+    from engine.backtest import Backtest
+    from strategies.donchian import generate_signals
+    sigs = generate_signals(spy_daily, period=20)
+    bt = Backtest(spy_daily, sigs["signal"], {})
+    r = bt.run()
+    rs = rolling_sharpe(r.returns, window=63)
+    assert len(rs) == len(r.returns), "Rolling Sharpe must match returns length"
+    assert rs.dropna().between(-50, 50).all(), "Rolling Sharpe should be in a sane range"
+
+
+def test_benchmark_metrics_keys(spy_daily):
+    from engine.backtest import Backtest
+    from strategies.donchian import generate_signals
+    sigs = generate_signals(spy_daily, period=20)
+    bt = Backtest(spy_daily, sigs["signal"], {})
+    r = bt.run()
+    spy_ret = spy_daily["Close"].pct_change().dropna()
+    bm = benchmark_metrics(r.returns, spy_ret)
+    if "error" not in bm:
+        for key in ["alpha", "beta", "correlation", "information_ratio", "tracking_error"]:
+            assert key in bm, f"Missing benchmark metric: {key}"
+        assert -5 <= bm["beta"] <= 5, "Beta should be sane"
+
+
+def test_scanner_returns_dataframe(spy_daily):
+    import strategies.donchian as donchian_strat
+    tickers = ["SPY", "QQQ"]
+    start = str(spy_daily.index[0].date())
+    end = str(spy_daily.index[-1].date())
+    results = scan_universe(
+        tickers,
+        lambda df: donchian_strat.generate_signals(df, period=20)["signal"],
+        {},
+        start, end,
+    )
+    assert isinstance(results, pd.DataFrame), "Scanner must return a DataFrame"
+    assert "ticker" in results.columns
+    assert len(results) <= len(tickers)

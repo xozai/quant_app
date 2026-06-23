@@ -179,3 +179,43 @@ def buy_and_hold(df: pd.DataFrame, starting_capital: float = 100_000) -> pd.Seri
     returns = df["Close"].pct_change().fillna(0)
     equity = starting_capital * (1 + returns).cumprod()
     return equity
+
+
+def rolling_sharpe(returns: pd.Series, window: int = 63) -> pd.Series:
+    """Annualized rolling Sharpe ratio over a rolling window of bars."""
+    mu = returns.rolling(window).mean()
+    sigma = returns.rolling(window).std()
+    return (mu / sigma * np.sqrt(252)).where(sigma > 0)
+
+
+def benchmark_metrics(strategy_returns: pd.Series, benchmark_returns: pd.Series) -> dict:
+    """
+    Compute alpha, beta, correlation, information ratio, and tracking error
+    of strategy_returns relative to benchmark_returns.
+    Both series must share the same DatetimeIndex (will be inner-joined).
+    """
+    aligned = pd.DataFrame({"strat": strategy_returns, "bench": benchmark_returns}).dropna()
+    if len(aligned) < 30:
+        return {"error": "Insufficient overlapping data (need ≥ 30 bars)."}
+
+    s = aligned["strat"]
+    b = aligned["bench"]
+    n_years = len(s) / 252
+
+    cov_matrix = np.cov(s, b)
+    beta = cov_matrix[0, 1] / cov_matrix[1, 1] if cov_matrix[1, 1] > 0 else 0.0
+    alpha_daily = s.mean() - beta * b.mean()
+    alpha_annual = alpha_daily * 252
+
+    corr = float(s.corr(b))
+    active = s - b
+    tracking_error = float(active.std() * np.sqrt(252))
+    ir = float(active.mean() / active.std() * np.sqrt(252)) if active.std() > 0 else 0.0
+
+    return {
+        "alpha": round(alpha_annual, 4),
+        "beta": round(beta, 4),
+        "correlation": round(corr, 4),
+        "information_ratio": round(ir, 4),
+        "tracking_error": round(tracking_error, 4),
+    }
