@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0](https://github.com/xozai/quant_app/compare/v0.3.3...v0.4.0) (2026-06-23)
+
+
+### Features
+
+* add MVP P1 features — compare, universe scan, rolling Sharpe, benchmark metrics, HTML export ([#19](https://github.com/xozai/quant_app/issues/19)) ([e4d5788](https://github.com/xozai/quant_app/commit/e4d5788f470171d8809f79fafbf8b559308b51d6))
+* add MVP P2 features — correlation heatmap and URL query param persistence ([#21](https://github.com/xozai/quant_app/issues/21)) ([961595d](https://github.com/xozai/quant_app/commit/961595d4b286c5f55f6b1135ebe6438f5b6c7f67))
+
+
+### Bug Fixes
+
+* resolve 6 bugs found during comprehensive testing ([#10](https://github.com/xozai/quant_app/issues/10)) ([afa90ee](https://github.com/xozai/quant_app/commit/afa90eea692556103501b89387f3b8e6fae8a1f4))
+
+
+### Documentation
+
+* add 'Where to run this' note to decision-assistant prompt ([#27](https://github.com/xozai/quant_app/issues/27)) ([d1d201d](https://github.com/xozai/quant_app/commit/d1d201dab5f99a3e5f8e1d0de7b6f0953420c2d1))
+* add detailed local deployment and app usage guide ([#23](https://github.com/xozai/quant_app/issues/23)) ([1a38bb9](https://github.com/xozai/quant_app/commit/1a38bb90ffafcdf0805992055e817e84ab63fb8c))
+* add quant trading decision-assistant operating prompt ([#25](https://github.com/xozai/quant_app/issues/25)) ([86811b2](https://github.com/xozai/quant_app/commit/86811b2e2e3f1e608594e2fbf198a0f60393c9f0))
+* update README with full feature set and add MIT license ([#2](https://github.com/xozai/quant_app/issues/2)) ([9044b80](https://github.com/xozai/quant_app/commit/9044b800bc415ac8575e50e4c51068d79241de5c))
+
 ## [0.3.3](https://github.com/xozai/quant_app/compare/v0.3.2...v0.3.3) (2026-06-23)
 
 
