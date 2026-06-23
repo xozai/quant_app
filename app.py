@@ -19,8 +19,10 @@ from engine.data import (
     fetch, fetch_daily_for_regime, DataError,
     MARKET_PRESETS, CRYPTO_TICKERS, NASDAQ_100, is_crypto,
 )
-from engine.backtest import Backtest, buy_and_hold
+from engine.backtest import Backtest, buy_and_hold, rolling_sharpe, benchmark_metrics
 from engine.risk import compute_drawdown
+from engine.scanner import scan_universe
+from engine.report import generate_html_report
 from engine.validation import (
     run_walk_forward, monte_carlo_test, plot_monte_carlo,
     plot_walk_forward, strategy_audit,
@@ -143,10 +145,11 @@ with st.sidebar:
 # Tabs
 # ---------------------------------------------------------------------------
 (
-    tab_results, tab_regime, tab_validation, tab_audit,
+    tab_results, tab_compare, tab_scan, tab_regime, tab_validation, tab_audit,
     tab_capital, tab_journal, tab_firm, tab_about
 ) = st.tabs([
-    "📊 Results", "🗺️ Regime", "🔬 Validation", "🧪 Strategy Audit",
+    "📊 Results", "⚖️ Compare", "🔭 Universe Scan",
+    "🗺️ Regime", "🔬 Validation", "🧪 Strategy Audit",
     "💰 Capital Allocator", "📓 Journal", "🤖 Agent Firm", "ℹ️ About",
 ])
 
@@ -341,19 +344,211 @@ if run_btn:
                                   margin=dict(l=40, r=20, t=40, b=40))
             st.plotly_chart(fig_ind, use_container_width=True)
 
+        # Rolling Sharpe chart
+        st.divider()
+        rs_window = st.slider("Rolling Sharpe Window (days)", 30, 252, 63, key="rs_window")
+        roll_sh = rolling_sharpe(result.returns, window=rs_window)
+        fig_rs = go.Figure()
+        fig_rs.add_trace(go.Scatter(x=roll_sh.index, y=roll_sh, name=f"Rolling Sharpe ({rs_window}d)",
+                                    line=dict(color="#f39c12", width=1.5)))
+        fig_rs.add_hline(y=1.0, line_dash="dash", line_color="green", annotation_text="Sharpe = 1.0")
+        fig_rs.add_hline(y=0.0, line_dash="dot", line_color="gray")
+        fig_rs.update_layout(title="Rolling Sharpe Ratio", height=260,
+                             margin=dict(l=40, r=20, t=40, b=40))
+        st.plotly_chart(fig_rs, use_container_width=True)
+
+        # Benchmark metrics vs SPY
+        st.divider()
+        st.subheader("Benchmark Metrics vs SPY")
+        with st.spinner("Computing benchmark metrics…"):
+            try:
+                spy_ret = fetch("SPY", str(start_date), str(end_date), "1d")["Close"].pct_change().dropna()
+                bm = benchmark_metrics(result.returns, spy_ret)
+                if "error" not in bm:
+                    bm_cols = st.columns(5)
+                    bm_cols[0].metric("Alpha (ann.)", f"{bm['alpha']*100:.1f}%")
+                    bm_cols[1].metric("Beta", f"{bm['beta']:.2f}")
+                    bm_cols[2].metric("Correlation", f"{bm['correlation']:.2f}")
+                    bm_cols[3].metric("Info Ratio", f"{bm['information_ratio']:.2f}")
+                    bm_cols[4].metric("Tracking Error", f"{bm['tracking_error']*100:.1f}%")
+                else:
+                    st.info(bm["error"])
+            except Exception:
+                st.info("Benchmark metrics unavailable (SPY fetch failed).")
+                bm = None
+
+        # Trade Log
+        st.divider()
         st.subheader("Trade Log")
         if not result.trades.empty:
             st.dataframe(result.trades, use_container_width=True, height=280)
-            st.download_button(
+            dl_cols = st.columns(2)
+            dl_cols[0].download_button(
                 "⬇️ Download Trades CSV",
                 result.trades.to_csv(index=False).encode(),
                 f"{ticker}_trades.csv", "text/csv",
             )
+            # HTML report export
+            with dl_cols[1]:
+                if st.button("📄 Export HTML Report"):
+                    try:
+                        bm_for_report = bm if isinstance(bm, dict) and "error" not in (bm or {}) else None
+                        html = generate_html_report(
+                            result, bah, ticker, strategy_name,
+                            str(start_date), str(end_date),
+                            benchmark_metrics=bm_for_report,
+                        )
+                        st.download_button(
+                            "⬇️ Download Report HTML",
+                            html.encode(),
+                            f"{ticker}_{strategy_name.replace(' ', '_')}_report.html",
+                            "text/html",
+                            key="report_dl",
+                        )
+                    except Exception as e:
+                        st.error(f"Report generation failed: {e}")
         else:
             st.info("No completed trades.")
 
     # ========================================================================
-    # TAB 2 — Regime
+    # TAB 2 — Compare
+    # ========================================================================
+    with tab_compare:
+        st.subheader("Strategy Comparison")
+        st.caption("Run all 5 strategy families on the same ticker and date range.")
+        if result is None:
+            st.info("Run a backtest first (click 'Run Backtest' in the sidebar).")
+        else:
+            if st.button("▶ Compare All Strategies", key="compare_btn"):
+                strategy_fns = {
+                    "Donchian Breakout": lambda df: donchian_strat.generate_signals(
+                        df, period=donchian_period, atr_period=atr_period, atr_k=atr_k,
+                        use_weekly_confirm=False, regime_signal=regime_signal,
+                    )["signal"],
+                    "VWAP+EMA+RSI Scalp": lambda df: scalp_strat.generate_signals(
+                        df, atr_period=atr_period, rsi_oversold=rsi_oversold,
+                        rsi_overbought=rsi_overbought, max_vwap_dist_pct=vwap_dist,
+                        regime_signal=regime_signal, allow_short=allow_short,
+                    )["signal"],
+                    "Trend-Join": lambda df: trend_join_strat.generate_signals(
+                        df, sma_period=sma_period, atr_period=atr_period,
+                        regime_signal=regime_signal,
+                    )["signal"],
+                    "Factor": lambda df: factor_strat.spy_factor_signal(df, regime_signal=regime_signal),
+                    "Regime Only": lambda df: (
+                        regime_signal.reindex(df.index, method="ffill").fillna(0) > 0
+                    ).astype(float),
+                }
+                rows = []
+                fig_cmp = go.Figure()
+                bah_cmp = buy_and_hold(df, starting_capital)
+                fig_cmp.add_trace(go.Scatter(x=bah_cmp.index, y=bah_cmp, name="Buy & Hold",
+                                             line=dict(dash="dash", color="#95a5a6")))
+
+                prog = st.progress(0)
+                for idx, (sname, sfn) in enumerate(strategy_fns.items()):
+                    with st.spinner(f"Running {sname}…"):
+                        try:
+                            sig = sfn(df)
+                            if sig.abs().sum() == 0:
+                                rows.append({"Strategy": sname, "note": "no signals"})
+                                continue
+                            bt_cmp = Backtest(df, sig, {}, starting_capital, commission_pct, slippage_pct)
+                            r_cmp = bt_cmp.run()
+                            m = r_cmp.metrics
+                            rows.append({
+                                "Strategy": sname,
+                                "CAGR %": f"{m['cagr']*100:.1f}",
+                                "Sharpe": m["sharpe"],
+                                "Max DD %": f"{m['max_drawdown']*100:.1f}",
+                                "Win Rate %": f"{m['win_rate']*100:.1f}",
+                                "Profit Factor": m["profit_factor"],
+                                "# Trades": m["n_trades"],
+                            })
+                            fig_cmp.add_trace(go.Scatter(x=r_cmp.equity.index, y=r_cmp.equity, name=sname))
+                        except Exception as e:
+                            rows.append({"Strategy": sname, "note": str(e)})
+                    prog.progress((idx + 1) / len(strategy_fns))
+
+                cmp_df = pd.DataFrame(rows)
+                st.subheader("Metrics Comparison")
+                if not cmp_df.empty:
+                    # Highlight best Sharpe
+                    st.dataframe(cmp_df, use_container_width=True)
+                fig_cmp.update_layout(title=f"{ticker} — All Strategies", height=400,
+                                      margin=dict(l=40, r=20, t=40, b=40))
+                st.plotly_chart(fig_cmp, use_container_width=True)
+
+    # ========================================================================
+    # TAB 3 — Universe Scan
+    # ========================================================================
+    with tab_scan:
+        st.subheader("Universe Scanner")
+        st.caption("Rank tickers from the selected market universe by Sharpe ratio.")
+
+        scan_universe_choice = st.radio(
+            "Universe", ["NASDAQ 100 (top 20)", "S&P 500 (top 20)", "Crypto (all 10)"],
+            horizontal=True, key="scan_universe",
+        )
+        scan_max = st.slider("Max Tickers", 5, 50, 20, key="scan_max")
+
+        from engine.data import NASDAQ_100, CRYPTO_TICKERS, SP500_TICKERS
+        if scan_universe_choice.startswith("NASDAQ"):
+            scan_tickers = NASDAQ_100[:scan_max]
+        elif scan_universe_choice.startswith("Crypto"):
+            scan_tickers = list(CRYPTO_TICKERS.values())[:scan_max]
+        else:
+            scan_tickers = SP500_TICKERS[:scan_max]
+
+        scan_strategy = st.selectbox("Strategy for Scan", [
+            "Donchian Breakout", "VWAP+EMA+RSI Scalp", "Trend-Join",
+        ], key="scan_strategy")
+
+        if st.button("🔭 Run Universe Scan", key="scan_btn"):
+            def scan_strat_fn(df_s, **kw):
+                if scan_strategy == "Donchian Breakout":
+                    return donchian_strat.generate_signals(df_s, period=donchian_period,
+                                                           atr_period=atr_period, atr_k=atr_k,
+                                                           use_weekly_confirm=False)["signal"]
+                elif scan_strategy == "VWAP+EMA+RSI Scalp":
+                    return scalp_strat.generate_signals(df_s, rsi_oversold=rsi_oversold,
+                                                        rsi_overbought=rsi_overbought,
+                                                        max_vwap_dist_pct=vwap_dist)["signal"]
+                else:
+                    return trend_join_strat.generate_signals(df_s, sma_period=sma_period,
+                                                              atr_period=atr_period)["signal"]
+
+            scan_progress = st.progress(0)
+            scan_status = st.empty()
+
+            def scan_cb(t, i, total):
+                scan_progress.progress(i / total)
+                scan_status.text(f"Scanned {i}/{total}: {t}")
+
+            with st.spinner("Scanning universe…"):
+                scan_results = scan_universe(
+                    scan_tickers, scan_strat_fn, {},
+                    str(start_date), str(end_date),
+                    interval="1d",
+                    starting_capital=starting_capital,
+                    commission_pct=commission_pct,
+                    slippage_pct=slippage_pct,
+                    progress_callback=scan_cb,
+                )
+
+            scan_progress.progress(1.0)
+            scan_status.text("Scan complete.")
+            st.subheader(f"Results — {scan_strategy} on {len(scan_tickers)} tickers")
+            st.dataframe(scan_results, use_container_width=True, height=400)
+            if not scan_results.empty:
+                st.download_button(
+                    "⬇️ Download Scan Results CSV",
+                    scan_results.to_csv(index=False).encode(),
+                    "universe_scan.csv", "text/csv",
+                )
+
+    # ========================================================================
+    # TAB — Regime
     # ========================================================================
     with tab_regime:
         st.subheader("Regime Dashboard")

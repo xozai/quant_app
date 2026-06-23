@@ -29,9 +29,10 @@ Click **Run Backtest** with the default settings — results appear immediately.
 pytest tests/ -v
 ```
 
-17 smoke tests cover data fetching (equities + crypto), all strategy signal generators,
-the backtest engine, regime labeling, Monte Carlo structure, Kelly criterion, capital
-allocator, and the 6-test strategy audit framework.
+93 tests (20 smoke + 73 comprehensive) cover data fetching (equities + crypto), all strategy
+signal generators, the backtest engine, rolling Sharpe, benchmark metrics, universe scanner,
+regime labeling, Monte Carlo structure, Kelly criterion, capital allocator, and the 6-test
+strategy audit framework.
 
 ---
 
@@ -52,7 +53,7 @@ are supported for crypto; 15m and 5m for equities.
 
 ```
 quant_app/
-├── app.py                        Streamlit UI (8 tabs)
+├── app.py                        Streamlit UI (10 tabs)
 ├── strategies/
 │   ├── regime.py                 SMA filter · 3-state Markov · HMM
 │   ├── donchian.py               Donchian channel breakout (default)
@@ -85,7 +86,9 @@ quant_app/
 
 | Tab | Contents |
 |---|---|
-| **📊 Results** | KPI tiles · equity curve · drawdown chart · VWAP/EMA overlay · trade log + CSV export |
+| **📊 Results** | KPI tiles · equity curve · drawdown chart · rolling Sharpe chart · benchmark metrics vs SPY (alpha, beta, IR) · trade log + CSV export · HTML report export |
+| **⚖️ Compare** | Run all 5 strategies on the same ticker — side-by-side metrics table and overlaid equity curves |
+| **🔭 Universe Scan** | Batch-run any strategy across NASDAQ 100, S&P 500, or Crypto universe — ranked by Sharpe with CSV download |
 | **🗺️ Regime** | Current regime · next-state probabilities · 3×3 transition matrix · persistence diagonal · stationary distribution · price chart with shaded bands |
 | **🔬 Validation** | Walk-forward (5 folds) · Monte Carlo acceptance test (1,000 sims) · Donchian parameter sensitivity heatmap |
 | **🧪 Strategy Audit** | 6-test stress framework: in-sample · walk-forward · Monte Carlo · parameter sensitivity · cost stress · drawdown analysis |
@@ -249,6 +252,27 @@ pattern:
 | Cost Optimizer | Weekly token-spend audit |
 
 No live orders are placed from this app.
+
+---
+
+## Changelog Highlights
+
+### v0.3.0 — MVP P1 Features (2026-06-23)
+- **Compare tab**: run all 5 strategies side-by-side on the same ticker
+- **Universe Scan tab**: batch-rank NASDAQ 100, S&P 500, or Crypto universe by Sharpe
+- **Rolling Sharpe chart**: visualize edge stability over configurable windows in Results tab
+- **Benchmark metrics**: alpha, beta, information ratio, tracking error vs SPY
+- **HTML report export**: one-click self-contained backtest summary shareable without the app
+- 3 new tests (`test_rolling_sharpe_length`, `test_benchmark_metrics_keys`, `test_scanner_returns_dataframe`)
+
+### v0.2.0 — Bug Fixes (2026-06-23)
+- Fixed `position_size()` returning 1 (not 0) when stop == entry ([#4](https://github.com/xozai/quant_app/issues/4))
+- Fixed short trade PnL sign in `journal.log_trade()` ([#5](https://github.com/xozai/quant_app/issues/5))
+- Renamed Donchian output columns to `upper_band`/`lower_band` ([#6](https://github.com/xozai/quant_app/issues/6))
+- Fixed `label_regime_states()` signature for direct labeling ([#7](https://github.com/xozai/quant_app/issues/7))
+- Lowered trend-join gap filter default to 0.0 for ETF compatibility ([#8](https://github.com/xozai/quant_app/issues/8))
+- Replaced deprecated `pd.Timestamp.utcnow()` ([#9](https://github.com/xozai/quant_app/issues/9))
+- Added 73 comprehensive tests across all modules
 
 ---
 
