@@ -51,12 +51,50 @@ st.set_page_config(
 st.title("📈 Quant Trading App — S&P 500 · NASDAQ · Crypto")
 
 # ---------------------------------------------------------------------------
+# URL query-param defaults (bookmarkable / shareable backtest links)
+# Keys: ticker, strategy, start, end, capital, regime
+# ---------------------------------------------------------------------------
+_qp = st.query_params
+
+def _qp_int(key: str, default: int) -> int:
+    try:
+        return int(_qp.get(key, default))
+    except (ValueError, TypeError):
+        return default
+
+def _qp_float(key: str, default: float) -> float:
+    try:
+        return float(_qp.get(key, default))
+    except (ValueError, TypeError):
+        return default
+
+def _qp_str(key: str, default: str) -> str:
+    return _qp.get(key, default)
+
+_PRESET_KEYS = list(MARKET_PRESETS.keys())
+_STRATEGY_OPTS = [
+    "Donchian Breakout",
+    "VWAP + EMA + RSI Scalp",
+    "Trend-Join Momentum",
+    "Factor (Momentum)",
+    "Regime Only",
+]
+_REGIME_OPTS = ["SMA Trend Filter", "3-State Markov", "Hidden Markov (HMM)"]
+
+_default_preset_idx = _PRESET_KEYS.index(_qp_str("preset", _PRESET_KEYS[0])) \
+    if _qp_str("preset", "") in _PRESET_KEYS else 0
+_default_strategy_idx = _STRATEGY_OPTS.index(_qp_str("strategy", _STRATEGY_OPTS[0])) \
+    if _qp_str("strategy", "") in _STRATEGY_OPTS else 0
+_default_regime_idx = _REGIME_OPTS.index(_qp_str("regime", _REGIME_OPTS[0])) \
+    if _qp_str("regime", "") in _REGIME_OPTS else 0
+
+# ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.header("Market & Instrument")
 
-    market_preset = st.selectbox("Market Preset", list(MARKET_PRESETS.keys()), index=0)
+    market_preset = st.selectbox("Market Preset", _PRESET_KEYS, index=_default_preset_idx)
     preset_ticker, preset_market = MARKET_PRESETS[market_preset]
 
     if preset_ticker is None:
@@ -78,20 +116,17 @@ with st.sidebar:
 
     strategy_name = st.selectbox(
         "Strategy Family",
-        [
-            "Donchian Breakout",
-            "VWAP + EMA + RSI Scalp",
-            "Trend-Join Momentum",
-            "Factor (Momentum)",
-            "Regime Only",
-        ],
+        _STRATEGY_OPTS,
+        index=_default_strategy_idx,
     )
 
+    _start_default = pd.Timestamp(_qp_str("start", "2019-01-01"))
+    _end_default = pd.Timestamp(_qp_str("end", str(pd.Timestamp.today().date())))
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Start Date", value=pd.Timestamp("2019-01-01"))
+        start_date = st.date_input("Start Date", value=_start_default)
     with col2:
-        end_date = st.date_input("End Date", value=pd.Timestamp.today())
+        end_date = st.date_input("End Date", value=_end_default)
 
     # Timeframe — crypto can run 24/7 on any bar
     if market_type == "crypto":
@@ -107,13 +142,13 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Capital & Risk")
-    starting_capital = st.number_input("Starting Capital ($)", value=100_000, step=5_000)
+    starting_capital = st.number_input("Starting Capital ($)", value=_qp_int("capital", 100_000), step=5_000)
     risk_pct = st.slider("Risk per Trade (%)", 0.5, 5.0, 1.0, 0.5) / 100
     allow_short = st.checkbox("Allow Short Positions", value=False)
 
     st.divider()
     st.subheader("Regime Model")
-    regime_model = st.radio("Model", ["SMA Trend Filter", "3-State Markov", "Hidden Markov (HMM)"])
+    regime_model = st.radio("Model", _REGIME_OPTS, index=_default_regime_idx)
     regime_key = {"SMA Trend Filter": "sma", "3-State Markov": "markov", "Hidden Markov (HMM)": "hmm"}[regime_model]
     sma_period = st.slider("SMA Period", 50, 300, 200, 10)
     markov_window = st.slider("Markov Window (days)", 10, 60, 20)
@@ -316,6 +351,16 @@ if run_btn:
         bt = Backtest(df, signal, {}, starting_capital, commission_pct, slippage_pct)
         result = bt.run()
         bah = buy_and_hold(df, starting_capital)
+
+    # Persist state as URL query params so the backtest is bookmarkable/shareable
+    st.query_params.update({
+        "preset": market_preset,
+        "strategy": strategy_name,
+        "start": str(start_date),
+        "end": str(end_date),
+        "capital": str(starting_capital),
+        "regime": regime_model,
+    })
 
     # ========================================================================
     # TAB 1 — Results
@@ -818,6 +863,55 @@ with tab_capital:
                                          yaxis_title="Return (%)", height=400,
                                          margin=dict(l=40, r=20, t=40, b=40))
                     st.plotly_chart(fig_ef, use_container_width=True)
+
+                    # ---- Correlation heatmap ----
+                    st.subheader("Correlation Heatmap")
+                    corr = returns_df.corr()
+                    labels = list(corr.columns)
+                    z = corr.values.round(2)
+                    text = [[f"{v:.2f}" for v in row] for row in z]
+                    fig_corr = go.Figure(go.Heatmap(
+                        z=z, x=labels, y=labels, text=text, texttemplate="%{text}",
+                        colorscale="RdBu", zmid=0, zmin=-1, zmax=1,
+                        colorbar=dict(title="Corr"),
+                    ))
+                    fig_corr.update_layout(
+                        title="Pairwise Return Correlations",
+                        height=max(300, len(labels) * 60),
+                        margin=dict(l=80, r=20, t=40, b=80),
+                    )
+                    st.plotly_chart(fig_corr, use_container_width=True)
+                    st.caption(
+                        "Values near +1 mean assets move together; near −1 means inverse. "
+                        "Diversification benefit requires low or negative cross-correlation."
+                    )
+
+                    # ---- Strategy vs universe correlation ----
+                    if result is not None:
+                        st.subheader("Strategy Return Correlations vs Asset Universe")
+                        strat_assets = {"Strategy": result.returns}
+                        for t in selected:
+                            try:
+                                strat_assets[t] = fetch(t, str(mz_start), str(mz_end), "1d")["Close"].pct_change().dropna()
+                            except Exception:
+                                pass
+                        combined = pd.DataFrame(strat_assets).dropna()
+                        if len(combined.columns) >= 2:
+                            corr2 = combined.corr()
+                            lbl2 = list(corr2.columns)
+                            z2 = corr2.values.round(2)
+                            txt2 = [[f"{v:.2f}" for v in row] for row in z2]
+                            fig_corr2 = go.Figure(go.Heatmap(
+                                z=z2, x=lbl2, y=lbl2, text=txt2, texttemplate="%{text}",
+                                colorscale="RdBu", zmid=0, zmin=-1, zmax=1,
+                                colorbar=dict(title="Corr"),
+                            ))
+                            fig_corr2.update_layout(
+                                title="Strategy vs Asset Returns",
+                                height=max(300, len(lbl2) * 60),
+                                margin=dict(l=80, r=20, t=40, b=80),
+                            )
+                            st.plotly_chart(fig_corr2, use_container_width=True)
 
 # ========================================================================
 # TAB 6 — Trade Journal
