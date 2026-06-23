@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/xozai/quant_app/compare/v0.1.1...v0.1.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* resolve 6 bugs found during comprehensive testing ([#10](https://github.com/xozai/quant_app/issues/10)) ([afa90ee](https://github.com/xozai/quant_app/commit/afa90eea692556103501b89387f3b8e6fae8a1f4))
+
 ## [0.1.1](https://github.com/xozai/quant_app/compare/v0.1.0...v0.1.1) (2026-06-23)
 
 
