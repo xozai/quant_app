@@ -124,6 +124,11 @@ The interface is split into a **sidebar** (left — all inputs) and **ten tabs**
 all outputs). The workflow is always the same: set parameters in the sidebar → click
 **🚀 Run Backtest** → read the results in the tabs.
 
+> 💡 For a disciplined, gate-by-gate decision workflow (how to turn these tabs into actual
+> buy/sell decisions on equities and crypto), see
+> [docs/decision-assistant-prompt.md](docs/decision-assistant-prompt.md) — a copy-paste prompt
+> for Claude or any LLM that walks you through backtest → validation → audit → regime → sizing.
+
 ### A. Configure your backtest (sidebar)
 
 Work top to bottom:
