@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/xozai/quant_app/compare/v0.3.0...v0.3.1) (2026-06-23)
+
+
+### Documentation
+
+* add detailed local deployment and app usage guide ([#23](https://github.com/xozai/quant_app/issues/23)) ([1a38bb9](https://github.com/xozai/quant_app/commit/1a38bb90ffafcdf0805992055e817e84ab63fb8c))
+
 ## [0.3.0](https://github.com/xozai/quant_app/compare/v0.2.0...v0.3.0) (2026-06-23)
 
 
