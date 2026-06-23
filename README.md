@@ -1,8 +1,11 @@
 # Quant Trading App — Local Streamlit Backtester
 
 A fully self-contained, locally runnable Streamlit application for systematic
-trading strategy design, backtesting, and visualization on the S&P 500 (SPY).
-No paid API keys required. All data from Yahoo Finance (yfinance), cached to disk.
+trading strategy design, backtesting, and visualization across **S&P 500**,
+**NASDAQ 100**, and **Crypto** (BTC, ETH, SOL, and more).
+
+No paid API keys required. Data from Yahoo Finance (yfinance) and the Binance
+public API, cached to disk.
 
 ---
 
@@ -10,7 +13,7 @@ No paid API keys required. All data from Yahoo Finance (yfinance), cached to dis
 
 ```bash
 cd quant_app
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 streamlit run app.py             # opens http://localhost:8501
@@ -26,9 +29,22 @@ Click **Run Backtest** with the default settings — results appear immediately.
 pytest tests/ -v
 ```
 
-Five smoke tests cover data fetching, the Donchian backtest engine,
-regime labeling, Monte Carlo output structure, ATR correctness, and
-drawdown non-positivity.
+17 smoke tests cover data fetching (equities + crypto), all strategy signal generators,
+the backtest engine, regime labeling, Monte Carlo structure, Kelly criterion, capital
+allocator, and the 6-test strategy audit framework.
+
+---
+
+## Markets Supported
+
+| Market | Ticker Examples | Data Source |
+|---|---|---|
+| S&P 500 | SPY, and top-50 constituents | Yahoo Finance |
+| NASDAQ 100 | QQQ, and top-50 constituents | Yahoo Finance |
+| Crypto | BTC-USD, ETH-USD, SOL-USD, + 7 more | Yahoo Finance + Binance public API |
+
+Crypto data is available 24/7 with no session gaps. Intraday intervals (1h, 4h)
+are supported for crypto; 15m and 5m for equities.
 
 ---
 
@@ -36,79 +52,118 @@ drawdown non-positivity.
 
 ```
 quant_app/
-├── app.py                  Streamlit UI
+├── app.py                        Streamlit UI (8 tabs)
 ├── strategies/
-│   ├── regime.py           SMA trend filter + 3-state Markov regime model
-│   ├── donchian.py         Donchian channel breakout (default)
-│   ├── trend_join.py       Trend-momentum-join entry rules
-│   ├── factor.py           Multi-factor scoring (price-based proxies)
-│   └── opening_range.py    Opening-range scalp (intraday)
+│   ├── regime.py                 SMA filter · 3-state Markov · HMM
+│   ├── donchian.py               Donchian channel breakout (default)
+│   ├── scalp.py                  VWAP + EMA(8) + RSI(3) scalping
+│   ├── trend_join.py             Multi-confirmation trend-join entry
+│   ├── factor.py                 Price-based momentum factor signal
+│   └── opening_range.py          Opening-range scalp (intraday)
 ├── engine/
-│   ├── data.py             yfinance fetch + parquet cache (~/.quant_app_cache/)
-│   ├── backtest.py         Vectorized engine with costs & slippage
-│   ├── risk.py             Position sizing, circuit breakers, R:R gate
-│   └── validation.py       Walk-forward + Monte Carlo acceptance test
+│   ├── data.py                   Fetch + parquet cache · market universes
+│   ├── backtest.py               Vectorized engine with costs & slippage
+│   ├── risk.py                   Fixed-fractional sizing · circuit breakers
+│   ├── validation.py             Walk-forward · Monte Carlo · 6-test audit
+│   ├── capital_allocator.py      Kelly criterion · MVO · multi-strategy weights
+│   └── journal.py                Trade logging · performance review
 ├── tests/
-│   └── test_smoke.py
+│   └── test_smoke.py             17 pytest smoke tests
+├── .github/workflows/
+│   ├── pr-title.yml              Conventional Commits PR title linting
+│   └── release-please.yml        Automated SemVer releases
+├── release-please-config.json
+├── .release-please-manifest.json
+├── CONTRIBUTING.md
+├── CHANGELOG.md
 └── requirements.txt
 ```
 
 ---
 
-## Strategy Spec
+## UI Tabs
+
+| Tab | Contents |
+|---|---|
+| **📊 Results** | KPI tiles · equity curve · drawdown chart · VWAP/EMA overlay · trade log + CSV export |
+| **🗺️ Regime** | Current regime · next-state probabilities · 3×3 transition matrix · persistence diagonal · stationary distribution · price chart with shaded bands |
+| **🔬 Validation** | Walk-forward (5 folds) · Monte Carlo acceptance test (1,000 sims) · Donchian parameter sensitivity heatmap |
+| **🧪 Strategy Audit** | 6-test stress framework: in-sample · walk-forward · Monte Carlo · parameter sensitivity · cost stress · drawdown analysis |
+| **💰 Capital Allocator** | Kelly criterion · multi-strategy Sharpe-weighted allocation · Markowitz mean-variance optimizer with efficient frontier |
+| **📓 Journal** | Log trades · performance review (win rate, Sharpe, profit factor, P&L by day-of-week) · CSV export |
+| **🤖 Agent Firm** | 6-agent autonomous trading firm spec · risk-thresholds editor · Paperclip API patterns · safety-check log schema |
+| **ℹ️ About** | Full strategy spec · integrated repos · disclaimers |
+
+---
+
+## Strategy Families
 
 ### 1. Donchian Channel Breakout (default)
 
-**Thesis**: Price breaking above its recent high (Donchian upper band) signals
-trend initiation. Confirmed on the weekly timeframe to filter noise. A trailing
-ATR stop captures the trend and controls downside.
+**Thesis**: Price breaking above its recent high signals trend initiation. Weekly
+confirmation filters noise; ATR trailing stop rides the trend.
 
-**Entry**: Close > prior bar's Donchian upper band (rolling max of High over N bars).
-Optional: same breakout required on weekly resampled data.
-
-**Exit**: ATR trailing stop — exit when close < prior close − k × ATR(14).
-
-**Regime gate**: Only trade long when price > SMA(200) (or Markov score > 0).
-
-**Parameters**:
-- `period`: Donchian lookback (default 20)
-- `atr_period`: ATR smoothing period (default 14)
-- `k`: ATR stop multiplier (default 2.0)
-
-**Known failure modes**:
-- Choppy, range-bound markets produce repeated whipsaws
-- Weekly confirmation may filter valid signals in fast-moving markets
-- ATR trailing stop can be too tight during high-volatility events
+- **Entry**: Close > prior Donchian upper band. Optional weekly confirmation.
+- **Exit**: Close < prior close − k × ATR(14).
+- **Regime gate**: Price > SMA(200) or Markov score > 0.
+- **Parameters**: `period` (default 20), `atr_period` (14), `k` (2.0).
+- **Known failure modes**: Choppy markets cause whipsaws; tight ATR stop during
+  high-volatility events; weekly confirmation can miss fast breakouts.
 
 ---
 
-### 2. Trend-Join Momentum
+### 2. VWAP + EMA(8) + RSI(3) Scalp
 
-**Thesis**: Enter a trend only after multiple confirmations align — breakout above
-prior-day high, price above the 200-SMA, gap-up with volume. This reduces chasing
-and focuses on high-conviction continuation setups.
+**Thesis**: Three indicators, each with a distinct role — VWAP for session bias,
+EMA(8) for trend direction, RSI(3) for entry timing. All must align before a trade.
 
-**Entry**: All of: (a) Close > prior High; (b) prior Close > SMA(200);
-(c) gap > 5%; (d) Volume > 50k; (e) Price > $3.
-
-**Exit**: ATR trailing stop; or if regime score flips negative.
-
----
-
-### 3. Factor (SPY Momentum)
-
-**Thesis**: SPY's own 12-1 month momentum relative to its rolling median predicts
-near-term direction — a simplified factor rotation applied to a single instrument.
-
-**Entry**: SPY's 12-1 momentum is above its 63-day rolling median.
-
-**Exit**: Momentum falls below median.
+- **Entry long**: Price > VWAP AND Price > EMA(8) AND RSI(3) < 30 AND within 1.5% of VWAP.
+- **Entry short** (optional): Price < VWAP AND Price < EMA(8) AND RSI(3) > 70.
+- **Exit**: RSI(3) crosses 50, or 0.3% stop hit.
+- **Works on**: Crypto (24/7), equities (intraday or daily).
+- **Safety-check gate**: All conditions logged to `safety_check_log.json` on every bar.
 
 ---
 
-### 4. Regime Only
+### 3. Trend-Join Momentum
 
-Long only when price > SMA(200) (or Markov score > 0). A baseline filter strategy.
+**Thesis**: Enter only after multiple trend confirmations align simultaneously,
+reducing false entries and focusing on high-conviction continuations.
+
+- **Entry**: Close > prior High AND prior Close > SMA(200) AND gap > 5% AND
+  volume > 50k AND price > $3.
+- **Exit**: ATR trailing stop; or regime flip to negative.
+
+---
+
+### 4. Factor (Momentum)
+
+**Thesis**: SPY's 12-1 month momentum relative to its rolling 63-day median
+predicts near-term direction.
+
+- **Entry**: 12-1 month momentum above rolling median.
+- **Exit**: Momentum falls below median.
+
+---
+
+### 5. Regime Only
+
+Long only when price > SMA(200) or Markov/HMM score > 0. Useful as a baseline
+to isolate the value of the regime filter alone.
+
+---
+
+## Regime Models
+
+| Model | Method | Signal Range |
+|---|---|---|
+| SMA Trend Filter | Close > SMA(N) | 0 or 1 |
+| 3-State Markov | MLE transition matrix + Chapman-Kolmogorov n-step forecast | −1 to +1 |
+| Hidden Markov (HMM) | Gaussian HMM via hmmlearn (falls back to GaussianMixture) | −1 to +1 |
+
+The Markov tab outputs the full analysis contract: current regime, next-state
+probabilities, transition matrix, persistence diagonal, stationary distribution,
+and a walk-forward backtest of the regime signal itself.
 
 ---
 
@@ -123,36 +178,118 @@ Long only when price > SMA(200) (or Markov score > 0). A baseline filter strateg
 
 ---
 
-## Anti-Overfitting Checklist
+## Validation Framework
 
-- [x] All signals shifted by 1 bar — no look-ahead bias
-- [x] Walk-forward analysis (5 folds, 70/30 train/test)
-- [x] Monte Carlo: 1,000 shuffles; PASS only if real Sharpe ∈ [median, 95th pct]
-- [x] Parameter sensitivity sweep (Donchian) — edge must be robust across grid
-- [x] Realistic costs: commission + slippage deducted on every position change
+### Walk-Forward
+5 rolling folds (70% train / 30% test). Mean OOS Sharpe flagged if below 0.5.
+
+### Monte Carlo Acceptance Test
+1,000 random shuffles of trade P&L. Strategy **PASS**es only if real Sharpe ∈
+[median simulation, 95th percentile]. A result above the 95th percentile is
+flagged as **FAIL_OVERFIT**.
+
+### 6-Test Strategy Audit
+Full stress test from the `strategy-audit` skill:
+
+| # | Test | Pass Threshold |
+|---|---|---|
+| 1 | In-sample | Sharpe > 1.0, Max DD < 20%, ≥ 50 trades |
+| 2 | Walk-forward OOS | Mean OOS Sharpe ≥ 1.0 |
+| 3 | Monte Carlo | Verdict = PASS |
+| 4 | Parameter sensitivity | Sharpe drop < 30% on ±20% cost change |
+| 5 | Cost stress (2× / 5×) | Sharpe > 0 at all cost multiples |
+| 6 | Drawdown analysis | Max drawdown < 20% |
+
+Verdict: **STRONG** (5–6 pass) · **MARGINAL** (3–4) · **FAIL** (< 3).
+
+### Anti-Overfitting Checklist
+- [x] All signals use `.shift(1)` — zero look-ahead bias
+- [x] Walk-forward: 5 folds, 70/30
+- [x] Monte Carlo: 1,000 shuffles, PASS ∈ [median, 95th pct]
+- [x] 6-test strategy audit
+- [x] Donchian parameter sensitivity heatmap (5 periods × 3 k-values)
+- [x] Realistic costs: commission + slippage on every position change
 
 ---
 
-## Paper Trading Outline (disabled by default)
+## Capital Allocator
+
+Three modes accessible from the **💰 Capital Allocator** tab:
+
+- **Kelly Criterion** — computes full and half-Kelly position size from win rate,
+  avg win, and avg loss.
+- **Multi-Strategy Weights** — Sharpe-weighted allocation across up to 6 strategies
+  with per-strategy Kelly sizing.
+- **Markowitz MVO** — Monte Carlo efficient frontier for 2–5 assets; outputs
+  max-Sharpe and min-volatility portfolios.
+
+---
+
+## Trade Journal
+
+Persistent CSV log at `~/.quant_app_cache/trade_journal.csv`. Log trades from
+the **📓 Journal** tab; performance review computes win rate, Sharpe, profit
+factor, max consecutive losses, max drawdown, and P&L by day of week.
+
+---
+
+## Agent Firm Architecture (Reference)
+
+The **🤖 Agent Firm** tab documents a 6-agent autonomous trading organization
+based on the [paperclip-zero-human-trading-firm](https://github.com/jackson-video-resources/paperclip-zero-human-trading-firm)
+pattern:
+
+| Agent | Role |
+|---|---|
+| CEO | Coordinator; routes tasks; human approval gate |
+| Research | Nightly strategy discovery |
+| Backtest | Historical validation (Sharpe ≥ 1.5 required) |
+| Risk Manager | Pre-execution gatekeeper; enforces `risk-thresholds.json` |
+| Execution | Places trades (paper by default) |
+| Cost Optimizer | Weekly token-spend audit |
+
+No live orders are placed from this app.
+
+---
+
+## Integrated Repos
+
+| Repo | Contribution |
+|---|---|
+| [`claude-tradingview-mcp-trading`](https://github.com/jackson-video-resources/claude-tradingview-mcp-trading) | VWAP+EMA+RSI scalp strategy; safety-check gate; trade CSV logging |
+| [`markov-hedge-fund-method`](https://github.com/jackson-video-resources/markov-hedge-fund-method) | Full Markov regime model with stationary distribution and HMM option |
+| [`paperclip-zero-human-trading-firm`](https://github.com/jackson-video-resources/paperclip-zero-human-trading-firm) | 6-agent firm spec; risk-thresholds schema; Paperclip API patterns |
+| [`skills`](https://github.com/jackson-video-resources/skills) | 6-test strategy audit; Kelly/MVO capital allocator; trade journal schema |
+
+---
+
+## Paper Trading Outline (disabled — reference only)
 
 > ⚠️ Do not connect live trading without independent review, appropriate risk
 > capital, and legal/regulatory compliance checks.
 
-A paper trading extension would require:
-1. **Live data feed**: Alpaca market data API (`alpaca-trade-api`) or Polygon.
-2. **Signal generation**: same `strategies/` modules, run on a scheduler (e.g., `apscheduler`).
-3. **Order execution**: Alpaca broker API — `api.submit_order(...)`.
-4. **Alert channel**: Telegram bot (`python-telegram-bot`) for pre-order notifications.
-5. **Human checkpoint**: orders held in a queue; human approves via `/approve` command before submission.
-6. **Audit log**: append each signal + order to a local SQLite database.
+1. **Live data**: Binance public API or Alpaca market data.
+2. **Signal generation**: Same `strategies/` modules on a cron schedule.
+3. **Safety check**: `strategies/scalp.safety_check()` must return `allowed=True`.
+4. **Human checkpoint**: Signal queued; human approves via Telegram `/approve`.
+5. **Execution**: Alpaca `api.submit_order(...)` (paper account first).
+6. **Audit log**: Every decision appended to `safety_check_log.json` and `trade_journal.csv`.
 
-No live-order code is included in this repository.
+---
+
+## Releases
+
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/) and
+[release-please](https://github.com/googleapis/release-please) for automated
+SemVer versioning. See [CONTRIBUTING.md](CONTRIBUTING.md) for PR title rules.
 
 ---
 
 ## Disclaimers
 
 - Backtested / simulated results do not guarantee future performance.
-- Past edge may not persist in live markets due to regime change, increased competition, or structural shifts.
-- This tool is for research and educational purposes only. It is not investment advice.
+- Crypto markets are highly volatile — drawdowns can be severe and rapid.
+- Past edge may not persist due to regime change, increased competition, or
+  structural market shifts.
+- This tool is for research and educational purposes only. It is **not** investment advice.
 - Always use risk capital you can afford to lose.
