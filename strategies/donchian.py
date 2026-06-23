@@ -78,8 +78,8 @@ def generate_signals(
 
     signals = pd.DataFrame({
         "signal": position,
-        "upper": dc["upper"],
-        "lower": dc["lower"],
+        "upper_band": dc["upper"],
+        "lower_band": dc["lower"],
         "atr_val": atr_s,
     }, index=df.index)
 

@@ -232,8 +232,20 @@ def get_regime_signal(
         raise ValueError(f"Unknown regime model: {model!r}. Choose 'sma', 'markov', or 'hmm'.")
 
 
-def label_regime_states(daily_df: pd.DataFrame, regime_signal: pd.Series) -> pd.Series:
-    """Convert numeric regime signal to string state labels for plotting."""
+def label_regime_states(
+    daily_df: pd.DataFrame,
+    regime_signal: pd.Series | None = None,
+    fwd_period: int = 20,
+    threshold: float = 0.05,
+) -> pd.Series:
+    """
+    Convert regime information to string state labels.
+    - If regime_signal is provided: maps numeric scores to Bull/Sideways/Bear strings (for plotting).
+    - If regime_signal is None: uses forward returns on daily_df to label states directly.
+    """
+    if regime_signal is None:
+        int_labels = _label_states(daily_df, fwd_period=fwd_period, threshold=threshold)
+        return int_labels.map(_STATE_NAMES)
     states = pd.Series("Sideways", index=regime_signal.index)
     states[regime_signal > 0.1] = "Bull"
     states[regime_signal < -0.1] = "Bear"
