@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/xozai/quant_app/compare/v0.3.2...v0.3.3) (2026-06-23)
+
+
+### Documentation
+
+* add 'Where to run this' note to decision-assistant prompt ([#27](https://github.com/xozai/quant_app/issues/27)) ([d1d201d](https://github.com/xozai/quant_app/commit/d1d201dab5f99a3e5f8e1d0de7b6f0953420c2d1))
+
 ## [0.3.2](https://github.com/xozai/quant_app/compare/v0.3.1...v0.3.2) (2026-06-23)
 
 
