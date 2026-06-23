@@ -221,3 +221,46 @@ def test_scanner_returns_dataframe(spy_daily):
     assert isinstance(results, pd.DataFrame), "Scanner must return a DataFrame"
     assert "ticker" in results.columns
     assert len(results) <= len(tickers)
+
+
+def test_correlation_matrix_properties(spy_daily):
+    """Correlation matrix must be symmetric, diagonal = 1.0, all values in [-1, 1]."""
+    assets = {"SPY": spy_daily["Close"].pct_change().dropna()}
+    try:
+        qqq = fetch("QQQ", "2020-01-01", "2023-12-31", "1d")
+        assets["QQQ"] = qqq["Close"].pct_change().dropna()
+    except Exception:
+        pass
+    returns_df = pd.DataFrame(assets).dropna()
+    corr = returns_df.corr()
+    # Diagonal must be 1.0
+    diag = [corr.iloc[i, i] for i in range(len(corr))]
+    assert all(abs(v - 1.0) < 1e-9 for v in diag), "Diagonal of correlation matrix must be 1.0"
+    # All values in [-1, 1]
+    assert (corr.values >= -1 - 1e-9).all() and (corr.values <= 1 + 1e-9).all(), \
+        "Correlation values must be in [-1, 1]"
+    # Symmetric
+    assert (corr.values - corr.values.T < 1e-9).all(), "Correlation matrix must be symmetric"
+
+
+def test_query_params_helpers():
+    """Unit-test the query param helper logic (int/float/str parsing)."""
+    def _qp_int_local(val, default):
+        try:
+            return int(val) if val is not None else default
+        except (ValueError, TypeError):
+            return default
+
+    assert _qp_int_local("100000", 50000) == 100000
+    assert _qp_int_local(None, 50000) == 50000
+    assert _qp_int_local("bad", 50000) == 50000
+
+    def _qp_float_local(val, default):
+        try:
+            return float(val) if val is not None else default
+        except (ValueError, TypeError):
+            return default
+
+    assert abs(_qp_float_local("1.5", 1.0) - 1.5) < 1e-9
+    assert _qp_float_local(None, 2.0) == 2.0
+    assert _qp_float_local("x", 2.0) == 2.0

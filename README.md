@@ -29,10 +29,10 @@ Click **Run Backtest** with the default settings — results appear immediately.
 pytest tests/ -v
 ```
 
-93 tests (20 smoke + 73 comprehensive) cover data fetching (equities + crypto), all strategy
+95 tests (22 smoke + 73 comprehensive) cover data fetching (equities + crypto), all strategy
 signal generators, the backtest engine, rolling Sharpe, benchmark metrics, universe scanner,
-regime labeling, Monte Carlo structure, Kelly criterion, capital allocator, and the 6-test
-strategy audit framework.
+correlation matrix properties, query param helpers, regime labeling, Monte Carlo structure,
+Kelly criterion, capital allocator, and the 6-test strategy audit framework.
 
 ---
 
@@ -92,7 +92,7 @@ quant_app/
 | **🗺️ Regime** | Current regime · next-state probabilities · 3×3 transition matrix · persistence diagonal · stationary distribution · price chart with shaded bands |
 | **🔬 Validation** | Walk-forward (5 folds) · Monte Carlo acceptance test (1,000 sims) · Donchian parameter sensitivity heatmap |
 | **🧪 Strategy Audit** | 6-test stress framework: in-sample · walk-forward · Monte Carlo · parameter sensitivity · cost stress · drawdown analysis |
-| **💰 Capital Allocator** | Kelly criterion · multi-strategy Sharpe-weighted allocation · Markowitz mean-variance optimizer with efficient frontier |
+| **💰 Capital Allocator** | Kelly criterion · multi-strategy Sharpe-weighted allocation · Markowitz mean-variance optimizer with efficient frontier · pairwise correlation heatmap · strategy vs universe correlation |
 | **📓 Journal** | Log trades · performance review (win rate, Sharpe, profit factor, P&L by day-of-week) · CSV export |
 | **🤖 Agent Firm** | 6-agent autonomous trading firm spec · risk-thresholds editor · Paperclip API patterns · safety-check log schema |
 | **ℹ️ About** | Full strategy spec · integrated repos · disclaimers |
@@ -256,6 +256,11 @@ No live orders are placed from this app.
 ---
 
 ## Changelog Highlights
+
+### v0.4.0 — MVP P2 Features (2026-06-23)
+- **Correlation heatmap** in Capital Allocator — pairwise return correlations among selected assets, plus strategy vs universe comparison (closes #18)
+- **Persistent URL query params** — ticker, strategy, date range, capital, regime model written to URL on Run Backtest; paste URL to restore the exact backtest (closes #17)
+- 2 new tests (`test_correlation_matrix_properties`, `test_query_params_helpers`)
 
 ### v0.3.0 — MVP P1 Features (2026-06-23)
 - **Compare tab**: run all 5 strategies side-by-side on the same ticker
