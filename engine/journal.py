@@ -53,11 +53,12 @@ def log_trade(
     notes: str = "",
 ) -> dict:
     """Append one trade to the journal CSV. Returns the logged row as a dict."""
-    now = pd.Timestamp.utcnow()
-    pnl_pct = (exit_price - entry_price) / entry_price if entry_price else 0
+    now = pd.Timestamp.now("UTC")
+    direction_sign = -1 if direction == "short" else 1
+    pnl_pct = direction_sign * (exit_price - entry_price) / entry_price if entry_price else 0
     pnl_usd = pnl_pct * entry_price * quantity
     stop_dist = abs(entry_price - stop_price) if not np.isnan(stop_price) else np.nan
-    r_multiple = (exit_price - entry_price) / stop_dist if (stop_dist and stop_dist > 0) else np.nan
+    r_multiple = direction_sign * (exit_price - entry_price) / stop_dist if (stop_dist and stop_dist > 0) else np.nan
 
     row = {
         "date": now.strftime("%Y-%m-%d"),
@@ -170,7 +171,7 @@ def log_safety_check(ticker: str, check_result: dict):
         except Exception:
             existing = []
     check_result["ticker"] = ticker
-    check_result["timestamp"] = pd.Timestamp.utcnow().isoformat()
+    check_result["timestamp"] = pd.Timestamp.now("UTC").isoformat()
     existing.append(check_result)
     with open(SAFETY_LOG_PATH, "w") as f:
         json.dump(existing[-500:], f, indent=2)  # keep last 500 decisions

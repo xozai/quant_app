@@ -13,7 +13,7 @@ def generate_signals(
     sma_period: int = 200,
     atr_period: int = 14,
     atr_k: float = 1.0,
-    min_gap_pct: float = 0.05,
+    min_gap_pct: float = 0.0,
     min_volume: int = 50_000,
     min_price: float = 3.0,
     regime_signal: pd.Series | None = None,

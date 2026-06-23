@@ -11,7 +11,7 @@ def position_size(capital: float, risk_pct: float, entry: float, stop: float) ->
     risk_dollar = capital * risk_pct
     stop_distance = abs(entry - stop)
     if stop_distance <= 0:
-        return 1
+        return 0
     shares = int(risk_dollar / stop_distance)
     return max(1, shares)
 
