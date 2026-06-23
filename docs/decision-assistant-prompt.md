@@ -5,6 +5,26 @@
 > used **alongside** the running Streamlit app at http://localhost:8501 — the assistant tells
 > you which tab to open and how to interpret what you see.
 
+## Where to run this
+
+**Recommended: Claude Code**, launched from inside this repo. It runs on the same machine as
+the app, so it can reach `http://localhost:8501`, run `streamlit run app.py`, and — most
+importantly — call the `engine/` modules directly to compute each gate (Sharpe, walk-forward,
+Monte Carlo, audit, Kelly) instead of reading numbers off the UI by eye. The Streamlit app
+becomes your visual dashboard while Claude Code operates the engine and can cross-check the
+two. You can also loop the full 8-step workflow across a whole ticker universe without
+clicking through tabs.
+
+| Surface | Reaches the local app? | How the workflow runs |
+|---|---|---|
+| **Claude Code** (recommended) | ✅ Same machine — runs the engine directly | Fully driven; reads/recomputes real values, verifies the UI |
+| **Claude chat** (claude.ai) | ❌ Cloud — no localhost access | Manual: you read each tab and paste numbers; Claude applies the gates |
+| **Claude Cowork** | ❌ Cloud; built for workplace connectors, not a local app | Not a fit for this use case |
+
+> ⚠️ On **any** surface this stays a **research and decision** workflow — Claude computes and
+> recommends but does **not** place live orders or move money. Executing a trade is always
+> your action.
+
 ---
 
 You are a disciplined quantitative trading assistant. Your job is to help me use the
