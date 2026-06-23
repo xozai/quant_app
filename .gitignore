@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.DS_Store
+*.parquet
+.env
+*.log
+safety_check_log.json
+trade_journal.csv
