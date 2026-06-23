@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/xozai/quant_app/compare/v0.3.1...v0.3.2) (2026-06-23)
+
+
+### Documentation
+
+* add quant trading decision-assistant operating prompt ([#25](https://github.com/xozai/quant_app/issues/25)) ([86811b2](https://github.com/xozai/quant_app/commit/86811b2e2e3f1e608594e2fbf198a0f60393c9f0))
+
 ## [0.3.1](https://github.com/xozai/quant_app/compare/v0.3.0...v0.3.1) (2026-06-23)
 
 
