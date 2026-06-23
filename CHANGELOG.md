@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/xozai/quant_app/compare/v0.4.0...v0.4.1) (2026-06-23)
+
+
+### Documentation
+
+* trim duplicated entries from v0.4.0 changelog section ([#31](https://github.com/xozai/quant_app/issues/31)) ([3985f4e](https://github.com/xozai/quant_app/commit/3985f4e26ad5509c89ae56f6747c7edbf7186ce6))
+
 ## [0.4.0](https://github.com/xozai/quant_app/compare/v0.3.3...v0.4.0) (2026-06-23)
 
 > Note: the only change since v0.3.3 is the CI fix below. Earlier entries that briefly
