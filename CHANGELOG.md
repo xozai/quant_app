@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/xozai/quant_app/compare/v0.2.0...v0.3.0) (2026-06-23)
+
+
+### Features
+
+* add MVP P2 features — correlation heatmap and URL query param persistence ([#21](https://github.com/xozai/quant_app/issues/21)) ([961595d](https://github.com/xozai/quant_app/commit/961595d4b286c5f55f6b1135ebe6438f5b6c7f67))
+
 ## [0.2.0](https://github.com/xozai/quant_app/compare/v0.1.2...v0.2.0) (2026-06-23)
 
 
