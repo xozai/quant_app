@@ -9,17 +9,99 @@ public API, cached to disk.
 
 ---
 
-## Quick Start
+## Local Deployment
+
+The app runs entirely on your machine. No accounts, API keys, or paid data feeds are
+required — market data comes from the free Yahoo Finance and Binance public endpoints.
+
+### Prerequisites
+
+| Requirement | Notes |
+|---|---|
+| **Python 3.10 – 3.14** | Check with `python3 --version`. macOS/Linux ship Python 3; on Windows install from [python.org](https://www.python.org/downloads/). |
+| **pip** | Bundled with modern Python. |
+| **Internet connection** | Needed on first run to download price data. After that the on-disk cache lets you work offline (see [Offline Use](#offline-use--data-cache)). |
+| **~200 MB free disk** | For the virtual environment and cached price data. |
+
+### Step 1 — Get the code
 
 ```bash
+git clone https://github.com/xozai/quant_app.git
 cd quant_app
-python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-streamlit run app.py             # opens http://localhost:8501
 ```
 
-Click **Run Backtest** with the default settings — results appear immediately.
+(If you already have the folder, just `cd quant_app`.)
+
+### Step 2 — Create an isolated virtual environment
+
+A virtual environment keeps the app's dependencies separate from your system Python.
+
+```bash
+python3 -m venv .venv
+```
+
+### Step 3 — Activate the environment
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
+# Windows (cmd.exe)
+.venv\Scripts\activate.bat
+```
+
+Your shell prompt should now be prefixed with `(.venv)`. Re-run this command in every
+new terminal session before launching the app.
+
+### Step 4 — Install dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+This installs Streamlit, pandas, numpy, yfinance, plotly, scipy, scikit-learn, hmmlearn,
+pytest, and pyarrow. Installation takes 1–3 minutes.
+
+### Step 5 — Launch the app
+
+```bash
+streamlit run app.py
+```
+
+Streamlit prints a local URL (default **http://localhost:8501**) and opens it in your
+browser automatically. If it doesn't open, paste the URL manually.
+
+To run on a different port or expose it on your LAN:
+
+```bash
+streamlit run app.py --server.port 8600 --server.address 0.0.0.0
+```
+
+### Step 6 — First run
+
+The app loads with sensible defaults (SPY, Donchian Breakout, daily bars, last ~5 years).
+Click **🚀 Run Backtest** in the sidebar — results appear in a few seconds. The first
+fetch for any ticker hits the network; subsequent runs read from cache and are instant.
+
+### Stopping & restarting
+
+- **Stop the server:** press `Ctrl+C` in the terminal running Streamlit.
+- **Restart later:** re-activate the venv (Step 3) and re-run `streamlit run app.py`.
+- **Deactivate the venv:** run `deactivate`.
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `command not found: streamlit` | The venv isn't activated, or deps aren't installed. Repeat Steps 3–4. |
+| `ModuleNotFoundError: No module named 'pandas'` | Same as above — you're using system Python, not the venv. |
+| Browser shows "connection refused" | The server isn't running, or the port is taken. Check the terminal, or try `--server.port 8600`. |
+| Empty chart / `DataError` | The ticker symbol is wrong, the date range has no trading days, or Yahoo Finance is rate-limiting. Try again or pick a different ticker. |
+| `hmmlearn` install fails | Optional — the HMM regime model falls back to a scikit-learn GaussianMixture automatically. The other models work without it. |
 
 ---
 
@@ -33,6 +115,94 @@ pytest tests/ -v
 signal generators, the backtest engine, rolling Sharpe, benchmark metrics, universe scanner,
 correlation matrix properties, query param helpers, regime labeling, Monte Carlo structure,
 Kelly criterion, capital allocator, and the 6-test strategy audit framework.
+
+---
+
+## How to Use the App
+
+The interface is split into a **sidebar** (left — all inputs) and **ten tabs** (right —
+all outputs). The workflow is always the same: set parameters in the sidebar → click
+**🚀 Run Backtest** → read the results in the tabs.
+
+### A. Configure your backtest (sidebar)
+
+Work top to bottom:
+
+1. **Market & Instrument**
+   - **Market Preset** — pick S&P 500 (SPY), NASDAQ 100 (QQQ), Bitcoin, Ethereum, Solana,
+     or **Custom ticker…**. Choosing Custom reveals a text box (e.g. `NVDA`, `AAPL`,
+     `BTC-USD`) and an Asset Class toggle (equity vs crypto).
+   - For crypto presets, a **Crypto Asset** dropdown lets you switch among the 10 supported coins.
+
+2. **Strategy Family** — choose one of the five strategies (see
+   [Strategy Families](#strategy-families) for the rules behind each):
+   Donchian Breakout · VWAP+EMA+RSI Scalp · Trend-Join Momentum · Factor (Momentum) · Regime Only.
+
+3. **Date range** — Start and End dates. Defaults to roughly the last five years.
+
+4. **Timeframe** — Daily for all markets; intraday 15m/5m for equities, 1h/4h for crypto.
+   (Intraday history from the free feed is limited to recent months.)
+
+5. **Capital & Risk** — starting capital, risk-per-trade %, and an optional
+   **Allow Short Positions** toggle (used by the scalp strategy).
+
+6. **Regime Model** — the filter that gates when trades are allowed:
+   - **SMA Trend Filter** — simplest; trade only when price > SMA(N).
+   - **3-State Markov** — Bull/Sideways/Bear transition model with an n-step forecast.
+   - **Hidden Markov (HMM)** — Gaussian HMM (auto-falls back to GaussianMixture).
+   - Sub-sliders set the SMA period, Markov window, and Bull/Bear threshold.
+
+7. **Strategy Parameters** — ATR period, Donchian period, ATR multiplier `k`, weekly
+   confirmation toggle, and the RSI/VWAP knobs for the scalp strategy.
+
+8. **Costs** — commission and slippage in basis points, applied on every position change.
+
+9. Click **🚀 Run Backtest**.
+
+### B. Read the results (tabs)
+
+| Tab | What to look at |
+|---|---|
+| **📊 Results** | Start here. KPI tiles (CAGR, Sharpe, Sortino, Max DD, Win Rate, Profit Factor), the equity curve vs buy-and-hold, the drawdown chart, the **rolling Sharpe** chart (is the edge stable or only present in one period?), **benchmark metrics vs SPY** (alpha, beta, information ratio), the trade log, and the **CSV / HTML report** export buttons. |
+| **⚖️ Compare** | Click **Compare All Strategies** to run all five on the same ticker and date range. Read the side-by-side metrics table and overlaid equity curves to pick the best fit. |
+| **🔭 Universe Scan** | Pick a universe (NASDAQ 100 / S&P 500 / Crypto) and a strategy, then **Run Universe Scan** to rank every ticker by Sharpe. Download the ranked table as CSV. |
+| **🗺️ Regime** | The current regime, next-state probabilities, the 3×3 transition matrix, the stationary distribution, and a price chart with shaded Bull/Sideways/Bear bands. |
+| **🔬 Validation** | Out-of-sample checks: 5-fold walk-forward, a 1,000-sim Monte Carlo acceptance test (PASS / FAIL_OVERFIT), and a Donchian parameter heatmap. |
+| **🧪 Strategy Audit** | A 6-test stress framework with PASS/FAIL badges per test and an overall verdict (STRONG / MARGINAL / FAIL). |
+| **💰 Capital Allocator** | Three modes: **Kelly Criterion** sizing, **Multi-Strategy Weights** (Sharpe-weighted), and **Markowitz** (pick 2–5 assets → efficient frontier, max-Sharpe & min-vol portfolios, plus a **correlation heatmap**). |
+| **📓 Journal** | Log real or paper trades, then review win rate, profit factor, and P&L by day-of-week. Persists to `~/.quant_app_cache/trade_journal.csv`. |
+| **🤖 Agent Firm** | Reference spec for a 6-agent autonomous trading firm and an editable risk-thresholds table. |
+| **ℹ️ About** | Full strategy spec, integrated repos, and disclaimers. |
+
+### C. Recommended first walkthrough
+
+1. **Results** — run the default SPY / Donchian backtest and read the KPI tiles.
+2. **Validation** — confirm the Monte Carlo verdict is **PASS** (not FAIL_OVERFIT).
+3. **Strategy Audit** — check the overall verdict and which of the 6 tests fail.
+4. **Compare** — see whether another strategy beats Donchian on this ticker.
+5. **Universe Scan** — find the strongest tickers in a universe for your chosen strategy.
+6. **Capital Allocator** — size positions with Kelly and check cross-asset correlations.
+7. **📄 Export HTML Report** (Results tab) — save a shareable summary.
+
+### D. Share or bookmark a backtest
+
+After you click Run Backtest, the app writes your settings (market preset, strategy,
+dates, capital, regime model) into the page URL. **Copy the URL** to bookmark that exact
+configuration or share it — opening it later restores those sidebar settings automatically.
+
+### Offline Use & Data Cache
+
+Every fetch is cached as a Parquet file under `~/.quant_app_cache/` and reused for 24 hours.
+After the first online run for a ticker/timeframe, you can re-run that backtest with no
+network connection. To force fresh data, delete the relevant file (or the whole folder):
+
+```bash
+rm -rf ~/.quant_app_cache        # macOS / Linux
+# Windows: rmdir /s %USERPROFILE%\.quant_app_cache
+```
+
+> ⚠️ This tool is for research and education only — it is **not** investment advice. See
+> the [Disclaimers](#disclaimers) at the end of this README.
 
 ---
 
@@ -63,13 +233,16 @@ quant_app/
 │   └── opening_range.py          Opening-range scalp (intraday)
 ├── engine/
 │   ├── data.py                   Fetch + parquet cache · market universes
-│   ├── backtest.py               Vectorized engine with costs & slippage
+│   ├── backtest.py               Vectorized engine · rolling Sharpe · benchmark metrics
 │   ├── risk.py                   Fixed-fractional sizing · circuit breakers
 │   ├── validation.py             Walk-forward · Monte Carlo · 6-test audit
 │   ├── capital_allocator.py      Kelly criterion · MVO · multi-strategy weights
+│   ├── scanner.py                Universe scan — rank tickers by Sharpe
+│   ├── report.py                 Self-contained HTML report generator
 │   └── journal.py                Trade logging · performance review
 ├── tests/
-│   └── test_smoke.py             17 pytest smoke tests
+│   ├── test_smoke.py             22 pytest smoke tests
+│   └── test_comprehensive.py     73 module-level tests
 ├── .github/workflows/
 │   ├── pr-title.yml              Conventional Commits PR title linting
 │   └── release-please.yml        Automated SemVer releases
